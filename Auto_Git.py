@@ -37,6 +37,9 @@ def git_automation():
         # Fazer o commit com a mensagem fornecida
         run_command(f'git commit -m "{commit_message}"')
 
+        # Adicione este comando antes de `git remote add origin`
+        run_command("git remote remove origin")
+
         # Adicionar o repositório remoto
         run_command(f"git remote add origin {repo_url}")
 
