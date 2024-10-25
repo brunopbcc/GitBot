@@ -1,8 +1,7 @@
 import os
 import subprocess
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import filedialog, simpledialog, Listbox, Scrollbar
+from tkinter import messagebox, filedialog, Listbox, Scrollbar, Text, Checkbutton, IntVar, Toplevel, Label, Button
 
 
 # Função para executar um comando no terminal
@@ -11,12 +10,39 @@ def run_command(command):
     return process.stdout.strip(), process.stderr.strip(), process.returncode
 
 
+# Função para listar arquivos modificados
+def list_files():
+    files_window = Toplevel(root)
+    files_window.title("Selecione Arquivos para Commit")
+
+    files, _, _ = run_command("git status -s")
+    modified_files = files.splitlines()
+    vars = []
+
+    # Adicionar arquivos modificados com checkboxes
+    for file in modified_files:
+        var = IntVar()
+        chk = Checkbutton(files_window, text=file, variable=var)
+        chk.pack(anchor='w')
+        vars.append((file, var))
+
+    def select_files():
+        selected_files = [file for file, var in vars if var.get() == 1]
+        entry_selected_files.delete(0, tk.END)
+        entry_selected_files.insert(0, " ".join(selected_files))
+        files_window.destroy()
+
+    button_select_files = Button(files_window, text="Selecionar Arquivos", command=select_files)
+    button_select_files.pack(pady=10)
+
+
 # Função para automatizar os passos do Git
 def git_automation():
     project_directory = entry_directory.get()
     repo_url = entry_repo_url.get()
     commit_message = entry_commit_message.get()
     branch_name = entry_branch.get()
+    selected_files = entry_selected_files.get()
 
     # Verificar se os campos estão preenchidos
     if not project_directory or not repo_url or not commit_message:
@@ -24,37 +50,54 @@ def git_automation():
         return
 
     try:
+        # Validar o diretório e a URL do repositório
+        if not os.path.exists(project_directory):
+            messagebox.showerror("Erro", "Diretório do projeto não encontrado.")
+            return
+
         # Mudar para o diretório do projeto
         os.chdir(project_directory)
-        print(f"Entrando no diretório do projeto: {project_directory}")
+        log_output("Entrando no diretório do projeto: " + project_directory)
 
         # Inicializar o repositório Git
         run_command("git init")
 
-        # Adicionar todos os arquivos
-        run_command("git add .")
+        # Adicionar arquivos selecionados
+        if selected_files:
+            run_command(f"git add {selected_files}")
+        else:
+            run_command("git add .")
 
         # Fazer o commit com a mensagem fornecida
         run_command(f'git commit -m "{commit_message}"')
 
-        # Adicione este comando antes de `git remote add origin`
+        # Remover e adicionar o repositório remoto
         run_command("git remote remove origin")
-
-        # Adicionar o repositório remoto
         run_command(f"git remote add origin {repo_url}")
 
-        # Tentar usar a branch selecionada
+        # Mudar para a branch especificada
         if branch_name:
             run_command(f"git checkout -b {branch_name}")
 
         # Enviar os arquivos para o GitHub
-        run_command("git push -u origin " + (branch_name if branch_name else "master"))
+        stdout, stderr, returncode = run_command(f"git push -u origin {branch_name if branch_name else 'master'}")
+        log_output("Push executado.")
 
-        # Mostrar mensagem de sucesso
-        messagebox.showinfo("Sucesso", "Projeto enviado para o GitHub com sucesso!")
+        if returncode == 0:
+            log_output(stdout)
+            messagebox.showinfo("Sucesso", "Projeto enviado para o GitHub com sucesso!")
+        else:
+            log_output(stderr)
+            messagebox.showerror("Erro", stderr)
 
     except Exception as e:
         messagebox.showerror("Erro", f"Ocorreu um erro: {str(e)}")
+
+
+# Função para exibir logs
+def log_output(message):
+    log_text.insert(tk.END, message + "\n")
+    log_text.see(tk.END)
 
 
 # Função para selecionar o diretório do projeto
@@ -123,9 +166,23 @@ button_list_branches.grid(row=3, column=2)
 listbox_branches = Listbox(frame, height=5, width=40)
 listbox_branches.grid(row=4, column=0, columnspan=3, pady=10)
 
+# Campo para arquivos selecionados
+label_selected_files = tk.Label(frame, text="Arquivos para Commit:")
+label_selected_files.grid(row=5, column=0, sticky="e")
+entry_selected_files = tk.Entry(frame, width=40)
+entry_selected_files.grid(row=5, column=1, padx=10, pady=5)
+button_select_files = tk.Button(frame, text="Selecionar Arquivos", command=list_files)
+button_select_files.grid(row=5, column=2)
+
+# Área de log
+label_log = tk.Label(frame, text="Logs:")
+label_log.grid(row=6, column=0, sticky="nw")
+log_text = Text(frame, height=10, width=50, wrap="word")
+log_text.grid(row=6, column=1, columnspan=2, pady=5)
+
 # Botão para iniciar a automação
 button_start = tk.Button(frame, text="Enviar para GitHub", command=git_automation, bg="green", fg="white")
-button_start.grid(row=5, columnspan=3, pady=10)
+button_start.grid(row=7, columnspan=3, pady=10)
 
 # Iniciar a interface gráfica
 root.mainloop()
